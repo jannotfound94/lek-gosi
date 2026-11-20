@@ -107,7 +107,7 @@ const aiFields = () => FIELDS.filter(f => aiStats(f.id).total > 0);
 async function boot() {
   load();
   try {
-    const nd = await fetch("data/new.json?v=3").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+    const nd = await fetch("data/new.json?v=116").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
     FIELDS = nd.fields;
     for (const [id, q, a, k, expl, src] of nd.q) {
       Q.push({ id, q, a, f: fieldOf(id), ai: true, src });
