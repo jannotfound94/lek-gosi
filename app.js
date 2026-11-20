@@ -4,7 +4,6 @@
 const NAME = "Gosia";
 const VOC = "Gosiu";
 const DEFAULT_EXAM = "2027-02-20";
-const SMK_DEADLINE = "2026-11-30";
 const STORE_KEY = "lek-gosia-v1";
 const L = ["A", "B", "C", "D", "E"];
 
@@ -61,6 +60,7 @@ function load() {
     if (raw) { const p = JSON.parse(raw); store = Object.assign(store, p); }
   } catch (e) { canStore = false; }
 }
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
 function save() {
   if (!canStore) return;
   try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) { canStore = false; }
@@ -161,10 +161,6 @@ function viewHome() {
       h("div", { class: "hero-stat" }, h("b", { text: String(streak()) }), h("span", { text: "dni z rzędu" }))));
 
   const parts = [topBar(), hero];
-  if (store.examDate === DEFAULT_EXAM && daysUntil(SMK_DEADLINE) >= 0) {
-    parts.push(h("p", { class: "note" }, h("b", { text: "Przypomnienie: " }),
-      "zgłoszenie na LEK 20 lutego 2027 składa się w SMK do " + fmtDate(SMK_DEADLINE) + " (zostało " + daysUntil(SMK_DEADLINE) + " " + plDays(daysUntil(SMK_DEADLINE)) + ")."));
-  }
   const totalKeyed = FIELDS.reduce((s, f) => s + f.keyed, 0);
   parts.push(h("div", { class: "section-head" }, h("h2", { text: "Dziedziny" }),
     h("span", { class: "muted", text: Q.length + " pytań z bazy CEM · " + totalKeyed + " z kluczem" })));
