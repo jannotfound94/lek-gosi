@@ -176,3 +176,7 @@ footer.foot { color: var(--muted); font-size: .8rem; display: grid; gap: 6px; }
 .unsure .h { font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; color: var(--warn); font-weight: 700; }
 .unsure .h + p { margin-bottom: 4px; }
 .unsure p { line-height: 1.5; }
+
+.explain p{white-space:pre-line}
+.aibox{display:grid;gap:12px;border-left:4px solid var(--accent,#2f7d6d)}
+.srcbox{margin-top:10px}
