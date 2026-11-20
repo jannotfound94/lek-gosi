@@ -84,7 +84,7 @@ function streak() {
 function fieldStats(fid) {
   let seen = 0, n = 0, ok = 0, wrong = 0;
   for (const q of Q) {
-    if (q.f !== fid || q.ai) continue;
+    if (q.f !== fid) continue;
     const r = store.ans[q.id];
     if (r) { seen++; n += r.n; ok += r.ok; if (r.last === 0) wrong++; }
   }
@@ -107,28 +107,22 @@ const aiFields = () => FIELDS.filter(f => aiStats(f.id).total > 0);
 async function boot() {
   load();
   try {
-    const [qd, kd] = await Promise.all([
-      fetch("data/questions.json").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
-      fetch("data/keys.json").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-    ]);
-    FIELDS = qd.fields; KEYS = kd;
-    Q = qd.q.map(([id, q, a]) => ({ id, q, a, f: fieldOf(id) }));
-    try {
-      const nd = await fetch("data/new.json").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
-      for (const [id, q, a, k, expl, src] of nd.q) {
-        Q.push({ id, q, a, f: fieldOf(id), ai: true, src });
-        KEYS[id] = [k, 1, expl, null, null];
-      }
-    } catch (e) { /* brak nowych pytań – aplikacja działa dalej na bazie CEM */ }
+    const nd = await fetch("data/new.json?v=3").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+    FIELDS = nd.fields;
+    for (const [id, q, a, k, expl, src] of nd.q) {
+      Q.push({ id, q, a, f: fieldOf(id), ai: true, src });
+      KEYS[id] = [k, 1, expl, null, null];
+    }
     for (const q of Q) BYID[q.id] = q;
   } catch (e) {
-    $("#app").replaceChildren(h("div", { class: "loading" }, h("p", { text: "Nie udało się wczytać bazy pytań. Odśwież stronę albo sprawdź połączenie z internetem." })));
+    $("#app").replaceChildren(h("div", { class: "loading" }, h("p", { text: "Nie udało się wczytać pytań. Odśwież stronę albo sprawdź połączenie z internetem." })));
     return;
   }
   document.addEventListener("keydown", onKey);
   render();
 }
-const keyed = (id) => KEYS[id] && KEYS[id][0] != null;
+const keyed = (id) => !!(KEYS[id] && KEYS[id][0] != null);
+const qCount = (fid) => Q.filter(q => q.f === fid).length;
 
 /* ---------- widoki ---------- */
 function render() {
@@ -144,7 +138,7 @@ function render() {
 function go(view, extra) { S = Object.assign({ view }, extra || {}); render(); window.scrollTo(0, 0); }
 
 function topBar(left) {
-  return h("div", { class: "top" }, left || h("span", { class: "brand", text: "LEK · baza CEM i pytania AI" }),
+  return h("div", { class: "top" }, left || h("span", { class: "brand", text: "LEK · pytania tajne" }),
     h("button", { class: "icon-btn", type: "button", onclick: openSettings, text: "Ustawienia" }));
 }
 
@@ -180,20 +174,13 @@ function viewHome() {
       h("div", { class: "hero-stat" }, h("b", { text: String(streak()) }), h("span", { text: "dni z rzędu" }))));
 
   const parts = [topBar(), hero];
-  const af = aiFields();
-  if (af.length) {
-    parts.push(h("section", { class: "panel aibox" },
-      h("div", { style: "display:grid;gap:4px" },
-        h("h2", { text: "Trening pod pytania tajne", style: "font-size:1.15rem" }),
-        h("p", { class: "small", text: "Nowe pytania kazuistyczne napisane przez AI według zasad CEM dla autorów pytań – tak jak będą wyglądać pytania tajne: opis przypadku, pięć odpowiedzi zbliżonej długości, bez negacji." })),
-      h("div", { class: "row" }, af.map(f => { const a = aiStats(f.id);
-        return h("button", { class: "btn accent", type: "button", onclick: () => startQuiz("ai", f.id), text: f.name + " · " + a.total + " " + plQ(a.total) + (a.seen ? " (" + a.seen + " zrobionych)" : "") }); }))));
-  }
-  const totalKeyed = FIELDS.reduce((s, f) => s + f.keyed, 0);
+  parts.push(h("section", { class: "panel aibox" },
+    h("h2", { text: "Trening pod pytania tajne", style: "font-size:1.15rem" }),
+    h("p", { class: "small", text: "Po reformie LEK pytania będą tajne, więc nie da się ich wykuć z jawnej bazy. Tu ćwiczysz na nowych pytaniach kazuistycznych, napisanych według zasad CEM dla autorów pytań: opis przypadku, pięć odpowiedzi podobnej długości, jedna poprawna, bez negacji. Po każdym pytaniu dostajesz wyjaśnienie, dlaczego jedna odpowiedź jest dobra, a pozostałe nie." })));
   parts.push(h("div", { class: "section-head" }, h("h2", { text: "Dziedziny" }),
-    h("span", { class: "muted", text: Q.filter(q => !q.ai).length + " pytań z bazy CEM · " + totalKeyed + " z kluczem" })));
+    h("span", { class: "muted", text: Q.length + " " + plQ(Q.length) + " w treningu" })));
   parts.push(h("div", { class: "tiles" }, FIELDS.map(tile)));
-  const wrongAll = Q.filter(q => !q.ai && keyed(q.id) && store.ans[q.id] && store.ans[q.id].last === 0);
+  const wrongAll = Q.filter(q => store.ans[q.id] && store.ans[q.id].last === 0);
   parts.push(h("div", { class: "row" },
     h("button", { class: "btn accent", type: "button", disabled: wrongAll.length === 0, onclick: () => startQuiz("repeat", null), text: "Powtórz błędne (" + wrongAll.length + ")" }),
     h("button", { class: "btn ghost", type: "button", disabled: store.bm.length === 0, onclick: () => startQuiz("saved", null), text: "Zapisane (" + store.bm.length + ")" })));
@@ -202,60 +189,52 @@ function viewHome() {
 }
 
 function tile(f) {
-  const st = fieldStats(f.id);
-  const ready = f.keyed > 0;
+  const st = fieldStats(f.id), total = qCount(f.id);
   const acc = pct(st.ok, st.n);
-  return h("button", { class: "tile" + (ready ? "" : " locked"), type: "button", onclick: () => go("field", { field: f.id }) },
+  return h("button", { class: "tile" + (total ? "" : " locked"), type: "button", onclick: () => go("field", { field: f.id }) },
     h("span", { class: "name", text: f.name }),
     h("span", { class: "meta" },
       h("span", { class: "chip", text: f.lek + " pyt. na LEK" }),
-      ready ? h("span", { class: "chip " + (f.keyed === f.total ? "ok" : "warn"), text: f.keyed === f.total ? "klucz gotowy" : "klucz: " + f.keyed + "/" + f.total })
-            : h("span", { class: "chip", text: "klucz w przygotowaniu" })),
-    h("div", { class: "bar", role: "img", "aria-label": "Rozwiązane " + st.seen + " z " + f.total },
-      h("i", { class: st.n ? (acc >= 56 ? "good" : "bad") : "", style: "width:" + pct(st.seen, f.total) + "%" })),
-    h("span", { class: "meta", text: st.seen + "/" + f.total + " rozwiązanych" + (st.n ? " · " + acc + "% poprawnych" : "") }));
+      h("span", { class: "chip " + (total ? "ok" : "warn"), text: total ? total + " " + plQ(total) : "pytania w przygotowaniu" })),
+    h("div", { class: "bar", role: "img", "aria-label": "Rozwiązane " + st.seen + " z " + total },
+      h("i", { class: st.n ? (acc >= 56 ? "good" : "bad") : "", style: "width:" + pct(st.seen, total) + "%" })),
+    h("span", { class: "meta", text: st.seen + "/" + total + " rozwiązanych" + (st.n ? " · " + acc + "% poprawnych" : "") }));
 }
 
 function viewField() {
   const f = FIELDS.find(x => x.id === S.field);
-  const st = fieldStats(f.id);
-  const keyedQs = Q.filter(q => q.f === f.id && !q.ai && keyed(q.id));
-  const ai = aiStats(f.id);
-  const fresh = keyedQs.filter(q => !store.ans[q.id]).length;
+  const st = fieldStats(f.id), total = qCount(f.id);
+  const fresh = Q.filter(q => q.f === f.id && !store.ans[q.id]).length;
   const saved = store.bm.filter(id => fieldOf(id) === f.id).length;
   const parts = [topBar(h("button", { class: "back", type: "button", onclick: () => go("home"), text: "‹ Wszystkie dziedziny" })),
     h("div", { style: "display:grid;gap:6px" }, h("h1", { text: f.name, style: "font-size:clamp(1.6rem,4vw,2.1rem)" }),
-      h("p", { class: "small", text: f.total + " pytań w bazie CEM · na LEK: " + f.lek + " pytań" }))];
+      h("p", { class: "small", text: total + " " + plQ(total) + " w treningu · na LEK: " + f.lek + " pytań" }))];
   parts.push(h("section", { class: "panel kpis" },
-    kpi(st.seen + "/" + f.total, "rozwiązanych"),
+    kpi(st.seen + "/" + total, "rozwiązanych"),
     kpi(st.n ? pct(st.ok, st.n) + "%" : "–", "poprawnych (próg LEK 56%)"),
     kpi(String(st.wrong), "do powtórki"),
-    kpi(String(f.keyed), "z kluczem")));
-  if (!f.keyed) {
-    parts.push(h("p", { class: "note" }, h("b", { text: "Klucz w przygotowaniu. " }),
-      "Baza CEM nie zawiera poprawnych odpowiedzi. Do czasu dodania klucza możesz przeglądać pytania – odpowiedzi nie będą sprawdzane."));
-  } else if (f.keyed < f.total) {
-    parts.push(h("p", { class: "note" }, h("b", { text: "Klucz częściowy: " }),
-      f.keyed + " z " + f.total + " pytań ma już klucz z wyjaśnieniem. Pozostałe dojdą w kolejnych aktualizacjach."));
+    kpi(String(total), "pytań w dziedzinie")));
+  if (!total) {
+    parts.push(h("p", { class: "note" }, h("b", { text: "Pytania w przygotowaniu. " }), "Dla tej dziedziny nie ma jeszcze pytań. Dojdą w kolejnej aktualizacji."));
+  } else if (total < f.lek) {
+    parts.push(h("p", { class: "note" }, h("b", { text: "Pula rośnie. " }), "Na razie jest tu " + total + " " + plQ(total) + ", a na LEK z tej dziedziny jest ich " + f.lek + ". Kolejne pytania dochodzą w aktualizacjach."));
   }
-  if (ai.total) parts.push(h("div", { class: "modes" },
-    mode("Nowe pytania (AI)", ai.total + " " + plQ(ai.total) + " pod pytania tajne" + (ai.n ? " · " + pct(ai.ok, ai.n) + "% poprawnych" : ""), false, () => startQuiz("ai", f.id))));
+  const examN = Math.min(f.lek, total);
   parts.push(h("div", { class: "modes" },
-    mode("Ucz się", fresh ? fresh + " nowych, potem błędne" : "wszystkie przerobione – mieszamy", !f.keyed, () => startQuiz("learn", f.id)),
+    mode("Ucz się", total ? (fresh ? fresh + " nowych, potem błędne" : "wszystkie przerobione – mieszamy") : "brak pytań", total === 0, () => startQuiz("learn", f.id)),
     mode("Powtórki", st.wrong + " " + plQ(st.wrong) + " z błędem", st.wrong === 0, () => startQuiz("repeat", f.id)),
-    mode("Mini-egzamin", f.lek + " pytań jak na LEK, wynik na końcu", keyedQs.length < f.lek, () => startExam(f.id)),
-    mode("Zapisane", saved + " oznaczonych gwiazdką", saved === 0, () => startQuiz("saved", f.id)),
-    mode("Przeglądaj", "po kolei, bez sprawdzania", false, () => startQuiz("browse", f.id))));
+    mode("Mini-egzamin", examN + " " + plQ(examN) + ", wynik na końcu", total < 5, () => startExam(f.id)),
+    mode("Zapisane", saved + " oznaczonych gwiazdką", saved === 0, () => startQuiz("saved", f.id))));
   const box = h("div", { class: "results" });
   const inp = h("input", { class: "search", type: "search", id: "search", placeholder: "Szukaj w pytaniach tej dziedziny…", "aria-label": "Szukaj w pytaniach" });
   inp.addEventListener("input", () => {
     const t = inp.value.trim().toLowerCase();
     if (t.length < 3) { box.replaceChildren(); return; }
-    const hits = Q.filter(q => q.f === f.id && !q.ai && (q.q + " " + q.a.join(" ")).toLowerCase().includes(t)).slice(0, 30);
+    const hits = Q.filter(q => q.f === f.id && (q.q + " " + q.a.join(" ")).toLowerCase().includes(t)).slice(0, 30);
     box.replaceChildren(...(hits.length ? hits.map(q => h("button", { class: "result", type: "button", onclick: () => startQuiz("single", f.id, q.id), text: q.q.slice(0, 160) + (q.q.length > 160 ? "…" : "") }))
       : [h("p", { class: "small", text: "Brak pytań z tym słowem." })]));
   });
-  parts.push(h("section", { style: "display:grid;gap:10px" }, h("h2", { text: "Szukaj", style: "font-size:1.15rem" }), inp, box));
+  if (total) parts.push(h("section", { style: "display:grid;gap:10px" }, h("h2", { text: "Szukaj", style: "font-size:1.15rem" }), inp, box));
   parts.push(foot());
   return h("div", { style: "display:grid;gap:20px" }, parts);
 }
@@ -264,34 +243,26 @@ function mode(t, s, dis, fn) { return h("button", { class: "mode", type: "button
 
 /* ---------- sesje pytań ---------- */
 function startQuiz(kind, fid, singleId) {
-  let pool = Q.filter(q => (!fid || q.f === fid) && (kind === "ai" ? q.ai : kind === "saved" || kind === "single" || !q.ai));
+  const pool = Q.filter(q => !fid || q.f === fid);
   let list;
-  if (kind === "ai") {
-    const fresh = shuffle(pool.filter(q => !store.ans[q.id]));
-    const wrong = shuffle(pool.filter(q => store.ans[q.id] && store.ans[q.id].last === 0));
-    const rest = shuffle(pool.filter(q => store.ans[q.id] && store.ans[q.id].last === 1));
-    list = fresh.concat(wrong, rest);
-  } else if (kind === "learn") {
-    pool = pool.filter(q => keyed(q.id));
+  if (kind === "learn") {
     const fresh = shuffle(pool.filter(q => !store.ans[q.id]));
     const wrong = shuffle(pool.filter(q => store.ans[q.id] && store.ans[q.id].last === 0));
     const rest = shuffle(pool.filter(q => store.ans[q.id] && store.ans[q.id].last === 1));
     list = fresh.concat(wrong, rest);
   } else if (kind === "repeat") {
-    list = shuffle(pool.filter(q => keyed(q.id) && store.ans[q.id] && store.ans[q.id].last === 0));
+    list = shuffle(pool.filter(q => store.ans[q.id] && store.ans[q.id].last === 0));
   } else if (kind === "saved") {
     list = pool.filter(q => store.bm.includes(q.id));
-  } else if (kind === "browse") {
-    list = pool.slice().sort((a, b) => a.id.localeCompare(b.id, "pl", { numeric: true }));
   } else if (kind === "single") {
     list = [BYID[singleId]];
   }
-  if (!list.length) return;
+  if (!list || !list.length) return;
   go("quiz", { kind, field: fid, list: list.map(q => q.id), i: 0, order: [0, 1, 2, 3, 4], picked: null, exam: null });
 }
 function startExam(fid) {
   const f = FIELDS.find(x => x.id === fid);
-  const pool = shuffle(Q.filter(q => q.f === fid && !q.ai && keyed(q.id))).slice(0, f.lek);
+  const pool = shuffle(Q.filter(q => q.f === fid)).slice(0, f.lek);
   go("quiz", { kind: "exam", field: fid, list: pool.map(q => q.id), i: 0, order: [0, 1, 2, 3, 4], picked: null,
     exam: { answers: [], orders: [], start: Date.now() } });
 }
@@ -313,8 +284,7 @@ function viewQuiz() {
 
   const card = h("article", { class: "qcard" });
   const meta = h("div", { class: "qmeta" }, h("span", { class: "chip accent", text: fName }),
-    q.ai ? h("span", { class: "chip warn", text: "Nowe pytanie (AI)" }) : h("span", { class: "chip", text: "CEM cz. " + id.split("-")[1] + ", nr " + id.split("-")[2] }));
-  if (!graded && !isExam) meta.append(h("span", { class: "chip warn", text: key ? "klucz niepewny" : "bez klucza" }));
+    h("span", { class: "chip warn", text: "Pytanie AI w stylu pytań tajnych" }));
   card.append(meta, h("div", { class: "qtext", html: rich(q.q) }));
 
   const reveal = S.picked != null && !isExam;
@@ -343,7 +313,7 @@ function viewQuiz() {
       card.append(h("div", { class: "explain" },
         h("span", { class: "h", text: "Wyjaśnienie" }), h("p", { text: key[2] }),
         h("p", { class: "small", text: q.ai ? "Pytanie napisane przez AI (Claude) według zasad CEM dla autorów pytań. Nie pochodzi z bazy CEM i nie przeszło recenzji ekspertów." : "Klucz opracowany przez AI (Claude) – nie jest to oficjalny klucz CEM." })));
-      if (q.ai && q.src) card.append(h("div", { class: "unsure srcbox" }, h("span", { class: "h", text: "Gdzie sprawdzić" }), h("p", { text: q.src }), h("p", { class: "small", text: BOOK })));
+      if (q.ai && q.src) card.append(h("div", { class: "unsure srcbox" }, h("span", { class: "h", text: "Gdzie sprawdzić" }), h("p", { text: q.src }), /Bręborowicz/.test(q.src) ? h("p", { class: "small", text: BOOK }) : null));
       if (!key[1] && key[3]) card.append(unsureBox(key));
     } else if (!graded) {
       card.append(h("p", { class: "small", text: "Klucz do tego pytania jest w przygotowaniu." }));
@@ -475,7 +445,7 @@ function openSettings() {
 
 function foot() {
   return h("footer", { class: "foot" },
-    h("p", { text: "Pytania pochodzą z oficjalnej bazy pytań LEK Centrum Egzaminów Medycznych (cem.edu.pl). Baza CEM nie zawiera poprawnych odpowiedzi – klucz i wyjaśnienia opracował Claude (AI) i nie są oficjalnym kluczem CEM. Przy wątpliwościach sprawdzaj w podręczniku z wykazu literatury CEM." }),
+    h("p", { text: "Pytania napisał Claude (AI) według zasad CEM dla autorów pytań, wzorując się na stylu jawnej bazy LEK. Nie są to oficjalne pytania CEM i nie przeszły recenzji ekspertów – przy wątpliwościach sprawdzaj w podręczniku z wykazu literatury CEM albo w aktualnych wytycznych." }),
     h("p", { text: "Postęp zapisuje się w tej przeglądarce. Zrobione z myślą o Gosi ♥" }));
 }
 
